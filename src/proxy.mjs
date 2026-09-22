@@ -139,16 +139,6 @@ export function claudeModels(catalog = []) {
 const modelForTier = (models, tier) => models.find((model) => model.tier === tier)?.id ?? idOf(tier);
 
 /**
- * Identifies the conversation a request belongs to. Claude Code runs sub-agents through the
- * same endpoint, so a single pinned model would let a sub-agent's choice leak into the main
- * conversation.
- *
- * Only stable fields may be used. Claude Code moves its `cache_control` breakpoint between
- * requests and rewrites message metadata, so the key is built from the session id plus the
- * text of the first message, which is fixed once a conversation starts and differs between
- * the main agent and each sub-agent.
- */
-/**
  * Session id Claude Code embeds in request metadata, or "" when it isn't present.
  * `metadata.user_id` is a JSON string, not a plain id.
  */
@@ -160,6 +150,16 @@ export function sessionOf(body) {
   }
 }
 
+/**
+ * Identifies the conversation a request belongs to. Claude Code runs sub-agents through the
+ * same endpoint, so a single pinned model would let a sub-agent's choice leak into the main
+ * conversation.
+ *
+ * Only stable fields may be used. Claude Code moves its `cache_control` breakpoint between
+ * requests and rewrites message metadata, so the key is built from the session id plus the
+ * text of the first message, which is fixed once a conversation starts and differs between
+ * the main agent and each sub-agent.
+ */
 export function conversationKey(body) {
   const session = sessionOf(body);
   const content = body?.messages?.[0]?.content;
