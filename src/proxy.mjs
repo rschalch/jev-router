@@ -9,6 +9,7 @@ import {
   availableTiers,
   tierSpec,
   isAuto,
+  isLegacyModel,
   shouldUseExactModel,
 } from "./config.mjs";
 import { askJev } from "./router.mjs";
@@ -112,10 +113,13 @@ export function applyTier(body, tierName, model = idOf(tierName)) {
   return body;
 }
 
-/** Exact Claude models reported by the account, newest first; static ids are the cold-start fallback. */
+/**
+ * Exact Claude models reported by the account that can take the request Claude Code composes,
+ * newest first; static ids are the cold-start fallback.
+ */
 export function claudeModels(catalog = []) {
   const models = catalog
-    .filter((model) => tierOf(model?.id))
+    .filter((model) => tierOf(model?.id) && !isLegacyModel(model.id))
     .map((model) => ({
       id: model.id,
       tier: tierOf(model.id),
@@ -222,10 +226,18 @@ export async function startProxy({ upstreamURL = ANTHROPIC_BASE_URL, route = ask
           }
           body.tools?.forEach((t) => sanitizeSchema(t.input_schema));
 
-          // Anything that is not the sentinel is a model the user chose, and an explicit
-          // choice beats the router. That also covers Claude Code's own cheap Haiku calls
-          // for titles and summaries, which must never be pinned up to the session's tier.
-          if (!isAuto(body.model)) {
+          if (/^\/v1\/messages\/count_tokens(?:\?|$)/.test(req.url)) {
+            // Claude Code counts tokens with the session's model, no metadata, and the real
+            // tools and messages (or a "foo" placeholder), so the request looks like a new
+            // turn. It is not one, and must neither cost a Jev call nor record a decision.
+            // The sentinel still has to become a real model the API can count for.
+            if (isAuto(body.model)) {
+              applyTier(body, "opus", modelForTier(claudeModels([...catalog.values()]), "opus"));
+            }
+          } else if (!isAuto(body.model)) {
+            // Anything that is not the sentinel is a model the user chose, and an explicit
+            // choice beats the router. That also covers Claude Code's own cheap Haiku calls
+            // for titles and summaries, which must never be pinned up to the session's tier.
             debug(`passthrough, user selected ${body.model}`);
             // Only a real agent turn reflects the user's choice. Claude Code's own auxiliary
             // calls carry no tools and must not flip the status line to manual mid-session.

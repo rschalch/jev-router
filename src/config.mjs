@@ -17,6 +17,16 @@ export const TIERS = [
 
 export const TIER_NAMES = TIERS.map((t) => t.name);
 
+/**
+ * Older Opus and Sonnet versions, and every Claude 3 model, accept neither adaptive thinking
+ * nor effort (per Claude Code's own model catalogue). Claude Code composes both for the
+ * router's sentinel, so offering one of these to Jev lets it pick a model that rejects the
+ * request. Haiku 4.5 is not listed: it is the haiku tier itself, and `applyTier` strips what
+ * it cannot accept.
+ */
+export const isLegacyModel = (id) =>
+  /^claude-(?:3-|(?:opus|sonnet)-4-(?:[015]\b|2\d{7}))/.test(id ?? "");
+
 export const rankOf = (name) => TIER_NAMES.indexOf(name);
 
 export const idOf = (name) => TIERS.find((t) => t.name === name)?.id;

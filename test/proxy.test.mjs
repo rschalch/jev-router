@@ -433,6 +433,7 @@ test("the key survives metadata that is not JSON", () => {
 /** A proxy in front of a fake API that records the model each request was sent to. */
 async function routedProxy(t) {
   const served = [];
+  const asked = [];
   const upstream = http.createServer((req, res) => {
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
@@ -446,11 +447,14 @@ async function routedProxy(t) {
   t.after(() => upstream.close());
   const { port, close } = await startProxy({
     upstreamURL: `http://127.0.0.1:${upstream.address().port}`,
-    route: async ({ prompt }) => ({
-      choice: prompt.includes("rename") ? "claude-haiku-4-5-20251001" : "claude-opus-5-5",
-      confidence: 0.99,
-      ms: 1,
-    }),
+    route: async ({ prompt }) => {
+      asked.push(prompt);
+      return {
+        choice: prompt.includes("rename") ? "claude-haiku-4-5-20251001" : "claude-opus-5-5",
+        confidence: 0.99,
+        ms: 1,
+      };
+    },
   });
   t.after(close);
   const sid = `proxy-${process.pid}-${Math.random().toString(36).slice(2)}`;
@@ -465,7 +469,7 @@ async function routedProxy(t) {
         messages,
       }),
     }).then((response) => response.text());
-  return { served, sid, send };
+  return { served, asked, port, sid, send };
 }
 
 const mainTurn = [{ role: "user", content: "rename this variable" }];
@@ -510,4 +514,47 @@ test("many sub-agents do not evict the main conversation's pinned model mid-turn
   }
   await send("jev-router", continuation);
   assert.equal(served.at(-1), "claude-haiku-4-5-20251001");
+});
+
+test("a token count is never routed, but still names a real model", async (t) => {
+  const { served, asked, port } = await routedProxy(t);
+  // What Claude Code sends to count its tool definitions: no metadata, the session's model,
+  // real tools, and a placeholder message (made unique so no earlier run's file can match).
+  const body = {
+    model: "jev-router",
+    tools: [{ name: "Bash" }],
+    messages: [{ role: "user", content: `foo ${process.pid} ${Date.now()}` }],
+  };
+  await fetch(`http://127.0.0.1:${port}/v1/messages/count_tokens?beta=true`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  assert.deepEqual(asked, [], "no Jev call");
+  assert.equal(served.at(-1), "claude-opus-5-5");
+  assert.equal(readStatus(conversationKey(body)), null, "no decision recorded");
+});
+
+test("older versions that reject adaptive thinking and effort are never offered to Jev", () => {
+  const offered = claudeModels([
+    { id: "claude-opus-5-5" },
+    { id: "claude-opus-4-6" },
+    { id: "claude-opus-4-5-20251101" },
+    { id: "claude-opus-4-1-20250805" },
+    { id: "claude-opus-4-20250514" },
+    { id: "claude-sonnet-5" },
+    { id: "claude-sonnet-4-6" },
+    { id: "claude-sonnet-4-5-20250929" },
+    { id: "claude-sonnet-4-20250514" },
+    { id: "claude-3-7-sonnet-20250219" },
+    { id: "claude-haiku-4-5-20251001" },
+    { id: "claude-3-5-haiku-20241022" },
+  ]).map(({ id }) => id);
+  assert.deepEqual(offered, [
+    "claude-opus-5-5",
+    "claude-opus-4-6",
+    "claude-sonnet-5",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5-20251001",
+  ]);
 });
