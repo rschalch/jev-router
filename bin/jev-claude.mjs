@@ -33,6 +33,16 @@ function autoModelEnv() {
   // ANTHROPIC_MODEL applies to this session only and is never written to settings, so the
   // default costs the user nothing permanent. A model they set themselves still wins.
   if (!process.env.ANTHROPIC_MODEL) env.ANTHROPIC_MODEL = AUTO_MODEL;
+  // An unrecognised model gets a trailing `role: "system"` turn, which Haiku rejects with a
+  // 400. Claude Code then retries without it, so every such turn cost a failed request and a
+  // second Jev call under a new conversation key, and the retry disabled it for the rest of
+  // the session anyway. The capability list above does not switch it off; this does.
+  env.CLAUDE_CODE_MODEL_CAPABILITIES = [
+    process.env.CLAUDE_CODE_MODEL_CAPABILITIES,
+    `${AUTO_MODEL}=-mid_conv_system`,
+  ]
+    .filter(Boolean)
+    .join(";");
   return env;
 }
 
