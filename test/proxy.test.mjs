@@ -429,3 +429,85 @@ test("the key survives metadata that is not JSON", () => {
   const body = { metadata: { user_id: "not-json" }, messages: [{ role: "user", content: "hi" }] };
   assert.doesNotThrow(() => conversationKey(body));
 });
+
+/** A proxy in front of a fake API that records the model each request was sent to. */
+async function routedProxy(t) {
+  const served = [];
+  const upstream = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      served.push(JSON.parse(Buffer.concat(chunks)).model);
+      res.setHeader("content-type", "application/json");
+      res.end("{}");
+    });
+  });
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  t.after(() => upstream.close());
+  const { port, close } = await startProxy({
+    upstreamURL: `http://127.0.0.1:${upstream.address().port}`,
+    route: async ({ prompt }) => ({
+      choice: prompt.includes("rename") ? "claude-haiku-4-5-20251001" : "claude-opus-5-5",
+      confidence: 0.99,
+      ms: 1,
+    }),
+  });
+  t.after(close);
+  const sid = `proxy-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const send = (model, messages) =>
+    fetch(`http://127.0.0.1:${port}/v1/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        metadata: { user_id: JSON.stringify({ session_id: sid }) },
+        tools: [{ name: "Bash" }],
+        messages,
+      }),
+    }).then((response) => response.text());
+  return { served, sid, send };
+}
+
+const mainTurn = [{ role: "user", content: "rename this variable" }];
+const continuation = [
+  ...mainTurn,
+  { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] },
+  { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] },
+];
+
+test("a sub-agent on its own model does not mark a routed session manual", async (t) => {
+  const { sid, send } = await routedProxy(t);
+  await send("jev-router", mainTurn);
+  await send("claude-haiku-4-5-20251001", [{ role: "user", content: "search the repo" }]);
+  const status = readStatus(sid);
+  assert.equal(status.manual, undefined);
+  assert.equal(status.history.length, 1);
+});
+
+test("switching the routed conversation to a model with /model marks it manual and keeps history", async (t) => {
+  const { sid, send } = await routedProxy(t);
+  await send("jev-router", mainTurn);
+  await send("claude-sonnet-5", [...continuation, { role: "user", content: "now add a test" }]);
+  const status = readStatus(sid);
+  assert.equal(status.manual, true);
+  assert.equal(status.history.length, 1, "jev-explain history survives the switch");
+});
+
+test("a session that never routed is manual from its first agent turn", async (t) => {
+  const { sid, send } = await routedProxy(t);
+  await send("claude-sonnet-5", mainTurn);
+  assert.equal(readStatus(sid).manual, true);
+});
+
+test("many sub-agents do not evict the main conversation's pinned model mid-turn", async (t) => {
+  const { served, send } = await routedProxy(t);
+  await send("jev-router", mainTurn);
+  assert.equal(served.at(-1), "claude-haiku-4-5-20251001");
+  // More sub-agents than the cache holds, with the main conversation active between them.
+  for (let i = 0; i < 600; i++) {
+    await send("jev-router", [{ role: "user", content: `sub-agent task ${i}` }]);
+    if (i % 100 === 0) await send("jev-router", continuation);
+  }
+  await send("jev-router", continuation);
+  assert.equal(served.at(-1), "claude-haiku-4-5-20251001");
+});

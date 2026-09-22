@@ -47,16 +47,21 @@ export function decide({ prompt, jev, current, available, contextTokens = 0 }) {
   if (!jev || !TIER_NAMES.includes(jev.choice)) return settle(current, "jev-unavailable");
 
   let target = jev.choice;
+  let reason = "jev";
 
-  // Damage potential is a separate axis from difficulty, so it is checked before any rule
-  // that could hold a turn on a cheaper model. Only an explicit user override outranks it.
-  if (jev.highStakes >= THRESHOLDS.highStakes && rankOf(target) < rankOf(THRESHOLDS.highStakesFloor)) {
-    return settle(THRESHOLDS.highStakesFloor, "high-stakes");
+  // Damage potential is a separate axis from difficulty, so it raises the target before any
+  // other rule runs, and no later rule may settle below it. Only an explicit user override
+  // outranks it. The hold rules below still apply: they only keep a stronger current model,
+  // so a high-stakes turn is never the one that downgrades and rebuilds the prompt cache.
+  const floor = jev.highStakes >= THRESHOLDS.highStakes ? rankOf(THRESHOLDS.highStakesFloor) : 0;
+  if (rankOf(target) < floor) {
+    target = TIER_NAMES[floor];
+    reason = "high-stakes";
   }
 
   if (jev.confidence < THRESHOLDS.minConfidence) {
     if (rankOf(target) < rankOf(current)) return settle(current, "low-confidence-no-downgrade");
-    const ceiling = Math.max(rankOf(current), rankOf(THRESHOLDS.uncertainCeiling));
+    const ceiling = Math.max(rankOf(current), rankOf(THRESHOLDS.uncertainCeiling), floor);
     if (rankOf(target) > ceiling) return settle(TIER_NAMES[ceiling], "low-confidence-capped");
   }
 
@@ -64,5 +69,5 @@ export function decide({ prompt, jev, current, available, contextTokens = 0 }) {
     return settle(current, "downgrade-not-worth-cache-rebuild");
   }
 
-  return settle(target, "jev");
+  return settle(target, reason);
 }

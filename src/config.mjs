@@ -90,19 +90,28 @@ const COMPLEXITY_SCALE = [
 
 export const COMPLEXITY_MAX_SCORE = COMPLEXITY_SCALE.length - 1;
 
-/** Phrases that mean "the human already decided", checked against the raw prompt. */
-export const OVERRIDE_PATTERNS = TIERS.map((t) => ({
-  tier: t.name,
-  re: new RegExp(
-    `\\b(?:use|switch to|with|on)\\s+(?:${{
-      haiku: "haiku|fast|luna",
-      sonnet: "sonnet|balanced|terra",
-      opus: "opus|strong|sol",
-      fable: "fable|long|astra",
-    }[t.name]})\\b`,
-    "i",
-  ),
-}));
+/**
+ * Phrases that mean "the human already decided", checked against the raw prompt. A model name
+ * is unambiguous, but the tier adjectives are everyday English ("use fast mode", "with strong
+ * typing", "on long-running jobs"), and an override outranks the high-stakes gate, so an
+ * adjective only counts when it stands alone or names a model or tier.
+ */
+export const OVERRIDE_PATTERNS = TIERS.map((t) => {
+  const [names, adjective] = {
+    haiku: ["haiku|luna", "fast"],
+    sonnet: ["sonnet|terra", "balanced"],
+    opus: ["opus|sol", "strong"],
+    fable: ["fable|astra", "long"],
+  }[t.name];
+  return {
+    tier: t.name,
+    re: new RegExp(
+      `\\b(?:use|switch to|with|on)\\s+(?:the\\s+)?` +
+        `(?:(?:${names})\\b|${adjective}(?:\\s+(?:model|tier)\\b|\\s*(?=[.,;:!?)]|$)))`,
+      "i",
+    ),
+  };
+});
 
 export const QUESTIONS = {
   task_complexity: score(

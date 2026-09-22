@@ -89,7 +89,8 @@ the last routing decision:
 │                                 │
 │ Jev request                     │
 │ Prompt: explain the router      │
-│ Current tier: HAIKU             │
+│ Current model:                  │
+│ CLAUDE-HAIKU-4-5-20251001       │
 │ Context tokens: 6200            │
 │                                 │
 │ Jev response                    │
@@ -98,8 +99,9 @@ the last routing decision:
 │ Tool complexity     0.64        │
 │ Context size        0.31        │
 │                                 │
-│ Recommended tier: SONNET        │
-│ Selected model: SONNET          │
+│ Jev recommended:                │
+│ CLAUDE-SONNET-5                 │
+│ Selected model: CLAUDE-SONNET-5 │
 │                                 │
 │ Confidence: 94%                 │
 │ Decision: Jev recommendation    │

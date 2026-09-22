@@ -6,7 +6,7 @@ import { availableTiers, shouldUseExactModel } from "./config.mjs";
 import { askJev } from "./router.mjs";
 import { decide } from "./policy.mjs";
 import { log } from "./log.mjs";
-import { writeDecision, writeStatus } from "./status.mjs";
+import { writeDecision, writeManual } from "./status.mjs";
 
 const CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const API_BASE_URL = "https://api.openai.com/v1";
@@ -233,7 +233,7 @@ export async function startCodexProxy({
           } else {
             const prompt = codexNewTurnPrompt(body);
             const explaining = prompt?.includes("<jev-explain>") || /^\$jev-explain\b/i.test(prompt ?? "");
-            if (prompt && !explaining) writeStatus(statusId, { manual: true, at: Date.now() });
+            if (prompt && !explaining) writeManual(statusId);
           }
           out = Buffer.from(JSON.stringify(body));
         } catch (err) {

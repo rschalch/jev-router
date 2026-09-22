@@ -34,6 +34,29 @@ test("detectOverride only fires on a real instruction", () => {
   assert.equal(detectOverride("use luna"), "haiku");
   assert.equal(detectOverride("use strong"), "opus");
   assert.equal(detectOverride("the opus of his career"), null);
+  assert.equal(detectOverride("use opus for this"), "opus");
+  assert.equal(detectOverride("please switch to the fast model"), "haiku");
+  assert.equal(detectOverride("do it with balanced."), "sonnet");
+});
+
+test("a tier adjective used as plain English is not an override", () => {
+  for (const prompt of [
+    "Drop the users table in production, use fast mode",
+    "use strong passwords in the seed script",
+    "add types with strong generics to the parser",
+    "work on long-running jobs later",
+    "make sure the tree stays with balanced nodes",
+    "run the tests on fast path",
+  ]) {
+    assert.equal(detectOverride(prompt), null, prompt);
+  }
+});
+
+test("a plain-English adjective cannot bypass the high-stakes gate", () => {
+  const prompt = "Drop the users table in production, use fast mode";
+  const out = decide({ ...base, prompt, jev: { choice: "haiku", confidence: 0.95, highStakes: 0.97 } });
+  assert.equal(out.tier, "opus");
+  assert.equal(out.reason, "high-stakes");
 });
 
 test("keeps the current model when Jev is unreachable", () => {
@@ -113,4 +136,16 @@ test("an explicit override still beats the high-stakes gate", () => {
 test("a low stakes probability, or none at all, leaves routing alone", () => {
   assert.equal(decide({ ...base, jev: { ...sure("haiku"), highStakes: 0.4 } }).tier, "haiku");
   assert.equal(decide({ ...base, jev: { ...sure("haiku"), highStakes: null } }).tier, "haiku");
+});
+
+test("the high-stakes gate never causes a downgrade the hold rules would refuse", () => {
+  const stronger = { ...base, current: "fable" };
+  assert.equal(decide({ ...stronger, jev: risky("haiku", 0.1) }).tier, "fable");
+  assert.equal(decide({ ...stronger, contextTokens: 150000, jev: risky("haiku") }).tier, "fable");
+});
+
+test("a low-confidence cap never lands below the high-stakes floor", () => {
+  const out = decide({ ...base, current: "haiku", jev: risky("fable", 0.2) });
+  assert.equal(out.tier, "opus");
+  assert.equal(out.reason, "low-confidence-capped");
 });

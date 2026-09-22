@@ -14,7 +14,7 @@ import {
 import { askJev } from "./router.mjs";
 import { decide } from "./policy.mjs";
 import { log } from "./log.mjs";
-import { writeDecision, writeStatus } from "./status.mjs";
+import { writeDecision, writeManual } from "./status.mjs";
 
 const ANTHROPIC_BASE_URL = "https://api.anthropic.com";
 const debug = (line) => process.env.JEV_DEBUG && log(line);
@@ -187,12 +187,20 @@ export async function startProxy({ upstreamURL = ANTHROPIC_BASE_URL, route = ask
   // by the cache-rebuild guard, which needs to know what the prompt cache was built on.
   const convos = new Map();
   const catalog = new Map();
+  // Sessions that have sent at least one routed request.
+  const routedSessions = new Set();
+  // Least recently used goes first. Every request refreshes its conversation, so a long main
+  // conversation is not evicted by the sub-agents it spawns and repinned mid-turn. Entries are
+  // tiny, so the cap is sized for a wide sub-agent fan-out while the main conversation waits.
   const stateFor = (key) => {
     let s = convos.get(key);
-    if (!s) {
-      if (convos.size > 50) convos.delete(convos.keys().next().value);
-      convos.set(key, (s = { tier: null }));
+    if (s) {
+      convos.delete(key);
+    } else {
+      if (convos.size >= 500) convos.delete(convos.keys().next().value);
+      s = { tier: null };
     }
+    convos.set(key, s);
     return s;
   };
 
@@ -221,12 +229,19 @@ export async function startProxy({ upstreamURL = ANTHROPIC_BASE_URL, route = ask
             debug(`passthrough, user selected ${body.model}`);
             // Only a real agent turn reflects the user's choice. Claude Code's own auxiliary
             // calls carry no tools and must not flip the status line to manual mid-session.
-            if (Array.isArray(body.tools)) {
-              writeStatus(sessionOf(body), { manual: true, at: Date.now() });
+            // Nor does a sub-agent that runs on its own model inside a routed session: only a
+            // conversation that was itself routed can have been switched away with /model.
+            const session = sessionOf(body);
+            if (
+              Array.isArray(body.tools) &&
+              (!routedSessions.has(session) || convos.get(conversationKey(body))?.tier)
+            ) {
+              writeManual(session);
             }
           } else {
             const key = conversationKey(body);
             const state = stateFor(key);
+            routedSessions.add(sessionOf(body));
             // What the prompt cache was built on, which is what a downgrade would discard.
             const current = state.tier ?? "opus";
             const prompt = newTurnPrompt(body);

@@ -43,6 +43,12 @@ export function writeDecision(sessionId, decision) {
   writeStatus(sessionId, { ...decision, history });
 }
 
+/** Mark a session as manually controlled, keeping its decision history for jev-explain. */
+export function writeManual(sessionId) {
+  const history = readStatus(sessionId)?.history;
+  writeStatus(sessionId, { manual: true, at: Date.now(), ...(history && { history }) });
+}
+
 /** Latest routing decision for a session, or null if none has been made yet. */
 export function readStatus(sessionId) {
   try {

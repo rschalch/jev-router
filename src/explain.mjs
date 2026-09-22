@@ -13,6 +13,7 @@ const wrapped = (label, value) => {
 
 const decision = (reason = "") => {
   if (reason.includes("override")) return "prompt override";
+  if (reason.includes("high-stakes")) return "high stakes; raised";
   if (reason.includes("jev-unavailable")) return "Jev unavailable; held";
   if (reason.includes("low-confidence-no-downgrade")) return "low confidence; held";
   if (reason.includes("low-confidence-capped")) return "low confidence; capped";
@@ -27,14 +28,17 @@ export function formatExplanation(status) {
 
   const m = status.metrics ?? {};
   const request = status.jev?.request?.state;
-  const recommendation = status.jev?.response?.answers?.model_tier?.choice ?? status.tier ?? "unknown";
+  // Jev's own answer, which policy may have overridden. `model_tier` is the key used before
+  // routing moved to exact model ids, kept so older status files still explain.
+  const answers = status.jev?.response?.answers;
+  const recommendation = answers?.model?.choice ?? answers?.model_tier?.choice ?? "unknown";
   return [
     `┌${"─".repeat(WIDTH)}┐`,
     row("Jev Router"),
     row(),
     row("Jev request"),
     ...wrapped("Prompt: ", status.prompt ?? "not recorded"),
-    row(`Current tier: ${(request?.session?.current_model ?? "unknown").toUpperCase()}`),
+    ...wrapped("Current model: ", (request?.session?.current_model ?? "unknown").toUpperCase()),
     row(`Context tokens: ${request?.session?.context_tokens ?? "unknown"}`),
     row(),
     row("Jev response"),
@@ -43,8 +47,8 @@ export function formatExplanation(status) {
     row(`Tool complexity     ${metric(m.toolComplexity)}`),
     row(`Context size        ${metric(m.contextSize)}`),
     row(),
-    row(`Recommended tier: ${recommendation.toUpperCase()}`),
-    row(`Selected model: ${(status.model ?? status.tier ?? "unknown").toUpperCase()}`),
+    ...wrapped("Jev recommended: ", recommendation.toUpperCase()),
+    ...wrapped("Selected model: ", (status.model ?? status.tier ?? "unknown").toUpperCase()),
     row(),
     row(`Confidence: ${status.confidence == null ? "n/a" : `${Math.round(status.confidence * 100)}%`}`),
     row(`Decision: ${decision(status.reason)}`),
