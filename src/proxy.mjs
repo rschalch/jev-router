@@ -54,7 +54,9 @@ export function sanitizeSchema(node) {
  */
 export function newTurnPrompt(body) {
   if (!Array.isArray(body?.tools) || body.tools.length === 0) return null; // auxiliary call
-  const last = body?.messages?.[body.messages.length - 1];
+  // Newer Claude Code versions append a `system` message carrying environment context after
+  // the user's turn, so the turn is the last message that is not one of those.
+  const last = body?.messages?.findLast((m) => m?.role !== "system");
   if (!last || last.role !== "user") return null;
   let text;
   if (typeof last.content === "string") {

@@ -221,6 +221,24 @@ test("reads a text block prompt as a new turn", () => {
   assert.equal(newTurnPrompt(body), "fix the bug");
 });
 
+test("reads the prompt past a trailing system message", () => {
+  const body = withTools([
+    { role: "user", content: [{ type: "text", text: "fix the bug" }] },
+    { role: "system", content: [{ type: "text", text: "# Environment" }] },
+  ]);
+  assert.equal(newTurnPrompt(body), "fix the bug");
+});
+
+test("ignores a tool_result continuation behind a trailing system message", () => {
+  const body = withTools([
+    { role: "user", content: "fix the bug" },
+    { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "done" }] },
+    { role: "system", content: "# Environment" },
+  ]);
+  assert.equal(newTurnPrompt(body), null);
+});
+
 test("ignores a tool_result continuation mid-turn", () => {
   const body = withTools([
     { role: "user", content: "fix the bug" },
@@ -295,7 +313,7 @@ test("routing to opus leaves thinking and effort intact", () => {
     output_config: { effort: "medium" },
   };
   applyTier(body, "opus");
-  assert.equal(body.model, "claude-opus-5");
+  assert.equal(body.model, "claude-opus-5-5");
   assert.deepEqual(body.thinking, { type: "adaptive" });
   assert.deepEqual(body.output_config, { effort: "medium" });
 });
