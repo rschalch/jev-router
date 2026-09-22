@@ -23,6 +23,9 @@ function getClient() {
   return client;
 }
 
+const normalised = (answer) =>
+  Number.isFinite(answer?.score) ? answer.score / COMPLEXITY_MAX_SCORE : null;
+
 /**
  * Asks Jev which tier fits this prompt. Returns null on any failure, which the policy
  * layer reads as "keep the current model" — routing must never block a prompt.
@@ -50,10 +53,11 @@ export async function askJev({ prompt, current, contextTokens, models }) {
       highStakes: high_stakes?.noul ?? null,
       request,
       response: result,
+      // Display-only, so a missing score must not throw away the model answer routing needs.
       metrics: {
-        taskComplexity: task_complexity.score / COMPLEXITY_MAX_SCORE,
-        reasoningRequired: reasoning_required.score / COMPLEXITY_MAX_SCORE,
-        toolComplexity: tool_complexity.score / COMPLEXITY_MAX_SCORE,
+        taskComplexity: normalised(task_complexity),
+        reasoningRequired: normalised(reasoning_required),
+        toolComplexity: normalised(tool_complexity),
         contextSize: Math.min(contextTokens / CONTEXT_WINDOW_TOKENS, 1),
       },
       ms: Date.now() - started,

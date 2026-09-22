@@ -2,7 +2,8 @@ import http from "node:http";
 import https from "node:https";
 import { createHash, randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { availableTiers, shouldUseExactModel } from "./config.mjs";
+import { availableTiers, PINNED_CONVERSATIONS, shouldUseExactModel } from "./config.mjs";
+import { LruMap } from "./lru.mjs";
 import { askJev } from "./router.mjs";
 import { decide } from "./policy.mjs";
 import { log } from "./log.mjs";
@@ -170,7 +171,7 @@ export async function startCodexProxy({
   route = askJev,
   statusId = "",
 } = {}) {
-  const states = new Map();
+  const states = new LruMap(PINNED_CONVERSATIONS);
   const models = new Map();
 
   const server = http.createServer((req, res) => {

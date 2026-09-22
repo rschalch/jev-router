@@ -10,11 +10,13 @@ import {
   tierSpec,
   isAuto,
   isLegacyModel,
+  PINNED_CONVERSATIONS,
   shouldUseExactModel,
 } from "./config.mjs";
 import { askJev } from "./router.mjs";
 import { decide } from "./policy.mjs";
 import { log } from "./log.mjs";
+import { LruMap } from "./lru.mjs";
 import { writeDecision, writeManual } from "./status.mjs";
 
 const ANTHROPIC_BASE_URL = "https://api.anthropic.com";
@@ -173,38 +175,17 @@ export function conversationKey(body) {
   return createHash("sha1").update(`${session}|${text}`).digest("hex").slice(0, 12);
 }
 
-/**
- * Records the tier Claude Code is asking for and reports whether the user has taken manual
- * control. The first tier seen in a conversation is the baseline; any later change means the
- * user picked a model with /model, and an explicit choice must beat the router. Compared by
- * tier rather than exact model id, because Claude Code varies the id within a tier.
- */
-export function observeModel(state, current) {
-  state.baseline ??= current;
-  if (current !== state.baseline) state.manual = true;
-  return state.manual;
-}
-
 
 export async function startProxy({ upstreamURL = ANTHROPIC_BASE_URL, route = askJev } = {}) {
   // Tier routed for each conversation's turn in flight, reused by its follow-up requests and
   // by the cache-rebuild guard, which needs to know what the prompt cache was built on.
-  const convos = new Map();
+  const convos = new LruMap(PINNED_CONVERSATIONS);
   const catalog = new Map();
   // Sessions that have sent at least one routed request.
   const routedSessions = new Set();
-  // Least recently used goes first. Every request refreshes its conversation, so a long main
-  // conversation is not evicted by the sub-agents it spawns and repinned mid-turn. Entries are
-  // tiny, so the cap is sized for a wide sub-agent fan-out while the main conversation waits.
   const stateFor = (key) => {
     let s = convos.get(key);
-    if (s) {
-      convos.delete(key);
-    } else {
-      if (convos.size >= 500) convos.delete(convos.keys().next().value);
-      s = { tier: null };
-    }
-    convos.set(key, s);
+    if (!s) convos.set(key, (s = { tier: null }));
     return s;
   };
 

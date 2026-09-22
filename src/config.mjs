@@ -85,6 +85,13 @@ export const THRESHOLDS = {
 
 export const CONTEXT_WINDOW_TOKENS = 200000;
 
+/**
+ * Conversations whose routed model each proxy remembers, least recently used evicted first.
+ * Entries are tiny, so this is sized for a wide sub-agent fan-out while the main
+ * conversation waits, which would otherwise be evicted and repinned mid-turn.
+ */
+export const PINNED_CONVERSATIONS = 500;
+
 const COMPLEXITY_SCALE = [
   "None",
   "Very low",
