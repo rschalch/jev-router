@@ -1,5 +1,5 @@
 // Every routing decision knob lives here, so the whole policy is reviewable in one file.
-import { choice, score } from "@typesafe-ai/sdk";
+import { choice, noul, score } from "@typesafe-ai/sdk";
 
 /**
  * Model tiers, cheapest first. `id` is what goes into the API request body; `family` is the
@@ -64,6 +64,13 @@ export const THRESHOLDS = {
   jevTimeoutMs: 1500,
   jevDeadlineMs: 3000,
   jevMaxRetries: 1,
+  /**
+   * Jev's probability that a request can do irreversible or costly damage. At or above it the
+   * turn goes to at least `highStakesFloor`, whatever the difficulty answer said: a mechanically
+   * simple `DELETE` in production is still the last request to hand the weakest model.
+   */
+  highStakes: 0.7,
+  highStakesFloor: "opus",
 };
 
 export const CONTEXT_WINDOW_TOKENS = 200000;
@@ -109,6 +116,13 @@ export const QUESTIONS = {
   tool_complexity: score(
     "How complex is the tool use required, from no tools to many coordinated or stateful operations?",
     COMPLEXITY_SCALE,
+  ),
+  high_stakes: noul(
+    "Could carrying out this request cause irreversible or costly damage if done wrong? Judge the damage potential, not how hard the work is.",
+    {
+      true: "Touches production data or infrastructure, deletes or migrates data, moves money, changes auth, permissions, secrets or security controls, or force-pushes or rewrites shared history.",
+      false: "Local, reversible, or read-only work: editing code under version control, explaining, planning, or running tests.",
+    },
   ),
 };
 

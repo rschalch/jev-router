@@ -28,7 +28,7 @@ function clampToAvailable(tier, available) {
  *
  * @param {object} input
  * @param {string} input.prompt        raw user prompt, for explicit-override detection
- * @param {?{choice: string, confidence: number}} input.jev  null when Jev failed
+ * @param {?{choice: string, confidence: number, highStakes?: ?number}} input.jev  null when Jev failed
  * @param {string} input.current       tier currently active in the session
  * @param {string[]} input.available   tier names the account can run
  * @param {number} input.contextTokens approximate size of the conversation so far
@@ -47,6 +47,12 @@ export function decide({ prompt, jev, current, available, contextTokens = 0 }) {
   if (!jev || !TIER_NAMES.includes(jev.choice)) return settle(current, "jev-unavailable");
 
   let target = jev.choice;
+
+  // Damage potential is a separate axis from difficulty, so it is checked before any rule
+  // that could hold a turn on a cheaper model. Only an explicit user override outranks it.
+  if (jev.highStakes >= THRESHOLDS.highStakes && rankOf(target) < rankOf(THRESHOLDS.highStakesFloor)) {
+    return settle(THRESHOLDS.highStakesFloor, "high-stakes");
+  }
 
   if (jev.confidence < THRESHOLDS.minConfidence) {
     if (rankOf(target) < rankOf(current)) return settle(current, "low-confidence-no-downgrade");

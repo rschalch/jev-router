@@ -88,3 +88,29 @@ test("accepts exact model changes within the same tier", () => {
   assert.equal(shouldUseExactModel("jev/no-change", "opus", "opus"), true);
   assert.equal(shouldUseExactModel("low-confidence-no-downgrade/no-change", "opus", "opus"), false);
 });
+
+const risky = (choice, confidence = 0.95) => ({ choice, confidence, highStakes: 0.97 });
+
+test("a high-stakes request is lifted to the floor tier whatever its difficulty", () => {
+  const out = decide({ ...base, prompt: "delete all rows in production where status is null", jev: risky("haiku") });
+  assert.equal(out.tier, "opus");
+  assert.equal(out.reason, "high-stakes");
+});
+
+test("the high-stakes gate beats the low-confidence cap and the cache-rebuild guard", () => {
+  assert.equal(decide({ ...base, jev: risky("haiku", 0.2) }).tier, "opus");
+  assert.equal(decide({ ...base, current: "opus", contextTokens: 90000, jev: risky("haiku") }).reason, "high-stakes/no-change");
+});
+
+test("the high-stakes gate never lowers a stronger choice", () => {
+  assert.equal(decide({ ...base, jev: risky("fable") }).tier, "fable");
+});
+
+test("an explicit override still beats the high-stakes gate", () => {
+  assert.equal(decide({ ...base, prompt: "use haiku to drop the table", jev: risky("haiku") }).tier, "haiku");
+});
+
+test("a low stakes probability, or none at all, leaves routing alone", () => {
+  assert.equal(decide({ ...base, jev: { ...sure("haiku"), highStakes: 0.4 } }).tier, "haiku");
+  assert.equal(decide({ ...base, jev: { ...sure("haiku"), highStakes: null } }).tier, "haiku");
+});

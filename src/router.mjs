@@ -27,7 +27,7 @@ function getClient() {
  * Asks Jev which tier fits this prompt. Returns null on any failure, which the policy
  * layer reads as "keep the current model" — routing must never block a prompt.
  *
- * @returns {Promise<?{choice: string, confidence: number, probabilities: object, metrics: object, ms: number}>}
+ * @returns {Promise<?{choice: string, confidence: number, highStakes: ?number, probabilities: object, metrics: object, ms: number}>}
  */
 export async function askJev({ prompt, current, contextTokens, models }) {
   if (!models?.length) return null;
@@ -44,9 +44,10 @@ export async function askJev({ prompt, current, contextTokens, models }) {
   };
   try {
     const result = await getClient().systemOne(request, { signal: abort.signal });
-    const { model: answer, task_complexity, reasoning_required, tool_complexity } = result.answers;
+    const { model: answer, task_complexity, reasoning_required, tool_complexity, high_stakes } = result.answers;
     return {
       ...answer,
+      highStakes: high_stakes?.noul ?? null,
       request,
       response: result,
       metrics: {
