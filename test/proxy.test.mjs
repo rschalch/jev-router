@@ -321,6 +321,24 @@ test("a prompt that is only a local command transcript is not a turn", () => {
   assert.equal(newTurnPrompt(body), null);
 });
 
+test("ignores Claude Code's next-prompt suggestion call", () => {
+  const body = withTools([
+    { role: "user", content: "fix the bug" },
+    { role: "assistant", content: "Fixed." },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "<system-reminder>x</system-reminder>" },
+        {
+          type: "text",
+          text: "[SUGGESTION MODE: Suggest what the user might naturally type next into Claude Code.]\n\nReply with ONLY the suggestion, no quotes or explanation.",
+        },
+      ],
+    },
+  ]);
+  assert.equal(newTurnPrompt(body), null);
+});
+
 test("routing to haiku strips fields haiku cannot accept", () => {
   const body = {
     model: "claude-sonnet-4-6",

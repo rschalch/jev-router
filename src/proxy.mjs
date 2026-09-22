@@ -75,12 +75,15 @@ export function newTurnPrompt(body) {
   } else {
     return null;
   }
-  return (
-    text
-      .replace(PROMPT_NOISE, "")
-      .replace(/<command-args>([\s\S]*?)<\/command-args>/g, "$1")
-      .trim() || null
-  );
+  const prompt = text
+    .replace(PROMPT_NOISE, "")
+    .replace(/<command-args>([\s\S]*?)<\/command-args>/g, "$1")
+    .trim();
+  // Claude Code's next-prompt suggestion replays the conversation with tools attached and an
+  // instruction appended as a user message. It is not a turn, and since it shares the main
+  // conversation's key, routing it would repin the session on the suggestion's difficulty.
+  if (prompt.startsWith("[SUGGESTION MODE:")) return null;
+  return prompt || null;
 }
 
 /**
