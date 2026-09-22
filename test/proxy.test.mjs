@@ -283,6 +283,44 @@ test("a prompt that is only a system reminder is not a turn", () => {
   assert.equal(newTurnPrompt(body), null);
 });
 
+test("strips the transcript of a local command prepended to the prompt", () => {
+  const body = withTools([
+    {
+      role: "user",
+      content:
+        "<local-command-caveat>Caveat: DO NOT respond to these messages.</local-command-caveat>\n\n" +
+        "<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n" +
+        "            <command-args></command-args>\n\n<local-command-stdout></local-command-stdout>\n\n" +
+        "verify the router works",
+    },
+  ]);
+  assert.equal(newTurnPrompt(body), "verify the router works");
+});
+
+test("keeps a slash command's arguments as the prompt", () => {
+  const body = withTools([
+    {
+      role: "user",
+      content:
+        "<command-name>/review</command-name>\n<command-message>review</command-message>\n" +
+        "<command-args>the auth refactor</command-args>",
+    },
+  ]);
+  assert.equal(newTurnPrompt(body), "the auth refactor");
+});
+
+test("a prompt that is only a local command transcript is not a turn", () => {
+  const body = withTools([
+    {
+      role: "user",
+      content:
+        "<command-name>/clear</command-name><command-args></command-args>" +
+        "<local-command-stdout>cleared</local-command-stdout>",
+    },
+  ]);
+  assert.equal(newTurnPrompt(body), null);
+});
+
 test("routing to haiku strips fields haiku cannot accept", () => {
   const body = {
     model: "claude-sonnet-4-6",

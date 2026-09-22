@@ -43,6 +43,9 @@ export function sanitizeSchema(node) {
   for (const v of Object.values(node)) sanitizeSchema(v);
 }
 
+const PROMPT_NOISE =
+  /<(system-reminder|local-command-caveat|local-command-stdout|local-command-stderr|command-name|command-message)>[\s\S]*?<\/\1>/g;
+
 /**
  * The text of a genuinely new user turn, or null.
  *
@@ -51,6 +54,8 @@ export function sanitizeSchema(node) {
  * Jev on every tool call and let the model flip mid-task, so only the opening request of a
  * turn counts. Claude Code also injects `<system-reminder>` blocks into the user message,
  * which are noise to a router and measurably blunt Jev's confidence, so they are removed.
+ * The same goes for the transcript of a local command such as `/clear`, which Claude Code
+ * prepends to the next prompt; only a command's arguments can carry the user's request.
  */
 export function newTurnPrompt(body) {
   if (!Array.isArray(body?.tools) || body.tools.length === 0) return null; // auxiliary call
@@ -70,7 +75,12 @@ export function newTurnPrompt(body) {
   } else {
     return null;
   }
-  return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim() || null;
+  return (
+    text
+      .replace(PROMPT_NOISE, "")
+      .replace(/<command-args>([\s\S]*?)<\/command-args>/g, "$1")
+      .trim() || null
+  );
 }
 
 /**
